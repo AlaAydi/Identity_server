@@ -1,11 +1,11 @@
 package com.identityserver.auth.service;
 
-import com.identityserver.auth.dto.LoginRequestDto;
-import com.identityserver.auth.dto.LoginResponseDto;
-import com.identityserver.auth.dto.RegisterRequestDto;
+import com.identityserver.auth.dto.*;
 import com.identityserver.auth.exception.InvalidCredentialsException;
 import com.identityserver.security.service.CustomUserDetailsService;
+import com.identityserver.token.entity.RefreshToken;
 import com.identityserver.token.service.JwtService;
+import com.identityserver.token.service.RefreshTokenService;
 import com.identityserver.user.dto.UserResponseDto;
 import com.identityserver.user.entity.User;
 import com.identityserver.user.exception.EmailAlreadyExistsException;
@@ -29,6 +29,7 @@ public class AuthService {
     private final UserMapper userMapper;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
     private final CustomUserDetailsService userDetailsService;
 
     @Transactional
@@ -59,7 +60,7 @@ public class AuthService {
         return userMapper.toResponseDto(savedUser);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public LoginResponseDto login(LoginRequestDto request) {
         String email = request.getEmail().toLowerCase().trim();
 
@@ -76,16 +77,42 @@ public class AuthService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(InvalidCredentialsException::new);
 
-        // 3. Génération du JWT Access Token
+        // 3. Génération du JWT Access Token et du Refresh Token persistent
         UserDetails userDetails = userDetailsService.loadUserByUsername(email);
         String jwtToken = jwtService.generateToken(userDetails);
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
         // 4. Construction du DTO de réponse
         return LoginResponseDto.builder()
                 .accessToken(jwtToken)
+                .refreshToken(refreshToken.getToken())
                 .tokenType("Bearer")
                 .expiresIn(jwtService.getExpirationTimeSeconds())
                 .user(userMapper.toResponseDto(user))
                 .build();
+    }
+
+    @Transactional
+    public RefreshTokenResponseDto refreshToken(RefreshTokenRequestDto request) {
+        // 1. Invalidation de l'ancien Refresh Token et création d'un nouveau (Token Rotation)
+        RefreshToken newRefreshToken = refreshTokenService.rotateRefreshToken(request.getRefreshToken());
+
+        // 2. Génération d'un nouvel Access Token
+        User user = newRefreshToken.getUser();
+        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+        String newAccessToken = jwtService.generateToken(userDetails);
+
+        // 3. Retour de la paire de tokens renouvelée
+        return RefreshTokenResponseDto.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken.getToken())
+                .tokenType("Bearer")
+                .expiresIn(jwtService.getExpirationTimeSeconds())
+                .build();
+    }
+
+    @Transactional
+    public void logout(String refreshTokenStr) {
+        refreshTokenService.revokeToken(refreshTokenStr);
     }
 }
