@@ -13,8 +13,9 @@ import lombok.NoArgsConstructor;
 public class LoginResponseDto {
 
     private String accessToken;
+    private String refreshToken;
     @Builder.Default
     private String tokenType = "Bearer";
-    private long expiresIn;
+    private long expiresIn; // En secondes (900)
     private UserResponseDto user;
 }
