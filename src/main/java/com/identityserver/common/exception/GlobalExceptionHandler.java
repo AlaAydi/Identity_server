@@ -1,6 +1,7 @@
 package com.identityserver.common.exception;
 
 import com.identityserver.common.dto.ErrorResponse;
+import com.identityserver.auth.exception.InvalidCredentialsException;
 import com.identityserver.user.exception.EmailAlreadyExistsException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,17 @@ public class GlobalExceptionHandler {
                 .timestamp(LocalDateTime.now())
                 .build();
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
+    @ExceptionHandler({InvalidCredentialsException.class, org.springframework.security.authentication.BadCredentialsException.class})
+    public ResponseEntity<ErrorResponse> handleInvalidCredentials(Exception ex) {
+        ErrorResponse response = ErrorResponse.builder()
+                .status(HttpStatus.UNAUTHORIZED.value())
+                .error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
+                .message("Email ou mot de passe incorrect")
+                .timestamp(LocalDateTime.now())
+                .build();
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
