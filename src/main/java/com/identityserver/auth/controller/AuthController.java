@@ -1,8 +1,6 @@
 package com.identityserver.auth.controller;
 
-import com.identityserver.auth.dto.LoginRequestDto;
-import com.identityserver.auth.dto.LoginResponseDto;
-import com.identityserver.auth.dto.RegisterRequestDto;
+import com.identityserver.auth.dto.*;
 import com.identityserver.auth.service.AuthService;
 import com.identityserver.common.dto.ApiResponse;
 import com.identityserver.user.dto.UserResponseDto;
@@ -30,5 +28,17 @@ public class AuthController {
     public ResponseEntity<ApiResponse<LoginResponseDto>> login(@Valid @RequestBody LoginRequestDto request) {
         LoginResponseDto loginResponse = authService.login(request);
         return ResponseEntity.ok(ApiResponse.success("Connexion réussie", loginResponse));
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<RefreshTokenResponseDto>> refreshToken(@Valid @RequestBody RefreshTokenRequestDto request) {
+        RefreshTokenResponseDto refreshedToken = authService.refreshToken(request);
+        return ResponseEntity.ok(ApiResponse.success("Jeton d'accès renouvelé avec succès", refreshedToken));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody RefreshTokenRequestDto request) {
+        authService.logout(request.getRefreshToken());
+        return ResponseEntity.ok(ApiResponse.success("Déconnexion réussie. Le Refresh Token a été révoqué.", null));
     }
 }
