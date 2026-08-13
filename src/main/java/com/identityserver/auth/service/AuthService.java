@@ -2,6 +2,8 @@ package com.identityserver.auth.service;
 
 import com.identityserver.auth.dto.*;
 import com.identityserver.auth.exception.InvalidCredentialsException;
+import com.identityserver.role.entity.Role;
+import com.identityserver.role.repository.RoleRepository;
 import com.identityserver.security.service.CustomUserDetailsService;
 import com.identityserver.token.entity.RefreshToken;
 import com.identityserver.token.service.JwtService;
@@ -20,11 +22,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
+import java.util.Set;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserMapper userMapper;
     private final AuthenticationManager authenticationManager;
@@ -39,10 +45,14 @@ public class AuthService {
             throw new EmailAlreadyExistsException(request.getEmail());
         }
 
-        // 2. Hash du mot de passe avec BCrypt
+        // 2. Récupération du rôle utilisateur par défaut ROLE_USER
+        Role userRole = roleRepository.findByName("ROLE_USER")
+                .orElseThrow(() -> new RuntimeException("Erreur d'initialisation : Rôle ROLE_USER introuvable"));
+
+        // 3. Hash du mot de passe avec BCrypt
         String passwordHash = passwordEncoder.encode(request.getPassword());
 
-        // 3. Création de l'entité User
+        // 4. Création de l'entité User avec le rôle ROLE_USER
         User user = User.builder()
                 .email(request.getEmail().toLowerCase().trim())
                 .passwordHash(passwordHash)
@@ -51,12 +61,13 @@ public class AuthService {
                 .enabled(true)
                 .emailVerified(false)
                 .mfaEnabled(false)
+                .roles(new HashSet<>(Set.of(userRole)))
                 .build();
 
-        // 4. Sauvegarde dans PostgreSQL
+        // 5. Sauvegarde dans PostgreSQL
         User savedUser = userRepository.save(user);
 
-        // 5. Mapping vers DTO de réponse
+        // 6. Mapping vers DTO de réponse
         return userMapper.toResponseDto(savedUser);
     }
 
