@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Set;
 import java.util.UUID;
 
 @Data
@@ -21,5 +22,7 @@ public class UserResponseDto {
     private boolean enabled;
     private boolean emailVerified;
     private boolean mfaEnabled;
+    private Set<String> roles;
+    private Set<String> permissions;
     private LocalDateTime createdAt;
 }
