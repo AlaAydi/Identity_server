@@ -1,0 +1,298 @@
+# 🔐 Identity & Authentication Server
+
+Serveur centralisé d'identité et d'authentification construit avec **Spring Boot**, inspiré de solutions professionnelles comme **Auth0**, **Keycloak** ou **Firebase Auth**.
+
+Ce projet a pour objectif de démontrer une compréhension approfondie des mécanismes de sécurité backend : hachage **BCrypt**, signature **JWT (HMAC-SHA256)**, rotation des tokens, **RBAC** (Role-Based Access Control), vérification d'email, et bien plus — sans dépendre d'une solution "boîte noire" tierce.
+
+![Java](https://img.shields.io/badge/Java-17+-orange)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-blue)
+![JWT](https://img.shields.io/badge/Auth-JWT-black)
+![Status](https://img.shields.io/badge/Status-In%20Progress-yellow)
+
+---
+
+## 🎯 Pourquoi ce projet ?
+
+| Raison | Détails |
+|---|---|
+| **Compétence recherchée** | L'authentification et la sécurité comptent parmi les compétences backend les plus demandées (Spring Security, JWT, OAuth2). |
+| **Architecture réelle** | Séparation claire entre l'authentification et le code métier : une application e-commerce ne gère jamais les mots de passe elle-même, elle délègue tout à l'Identity Server. |
+| **Compréhension profonde** | Plutôt que d'utiliser Auth0 comme boîte noire, ce projet implémente lui-même le hachage BCrypt, la signature JWT HMAC-SHA256, la rotation des tokens et le RBAC. |
+| **Portfolio avancé** | Démontre un niveau ingénieur : monolithe modulaire, sécurité multicouche, gestion de sessions, audit, MFA, OAuth2. |
+| **Réutilisabilité** | L'Identity Server peut servir plusieurs applications clientes (E-commerce, Admin Panel, Mobile App...) via JWT et API Keys. |
+
+---
+
+## 🏗️ Architecture du projet
+
+```
+identity-server/
+├── pom.xml, mvnw.cmd, .env, .env.example, .gitignore
+└── src/main/java/com/identityserver/
+    ├── IdentityServerApplication.java
+    │
+    ├── auth/                          # Authentification
+    │   ├── controller/AuthController
+    │   ├── service/AuthService
+    │   ├── dto/ (Register, Login, Refresh, Resend...)
+    │   └── exception/ (InvalidCredentials, InvalidRefreshToken, InvalidVerificationToken)
+    │
+    ├── user/                          # Utilisateurs
+    │   ├── entity/User
+    │   ├── repository/UserRepository
+    │   ├── dto/UserResponseDto
+    │   ├── mapper/UserMapper
+    │   ├── controller/UserController
+    │   └── exception/EmailAlreadyExistsException
+    │
+    ├── role/                          # Rôles (RBAC)
+    │   ├── entity/Role
+    │   └── repository/RoleRepository
+    │
+    ├── permission/                    # Permissions (RBAC)
+    │   ├── entity/Permission
+    │   └── repository/PermissionRepository
+    │
+    ├── token/                         # JWT & Refresh Tokens
+    │   ├── entity/RefreshToken
+    │   ├── repository/RefreshTokenRepository
+    │   └── service/ (JwtService, RefreshTokenService)
+    │
+    ├── notification/                  # Vérification d'email
+    │   ├── entity/VerificationToken
+    │   ├── repository/VerificationTokenRepository
+    │   └── service/ (EmailService, VerificationTokenService)
+    │
+    ├── security/                      # Spring Security
+    │   ├── config/ (SecurityConfig, PasswordEncoderConfig)
+    │   ├── jwt/ (JwtAuthenticationFilter, JwtAuthenticationEntryPoint)
+    │   └── service/CustomUserDetailsService
+    │
+    └── common/                        # Utilitaires
+        ├── config/DataInitializer
+        ├── dto/ (ApiResponse, ErrorResponse)
+        └── exception/GlobalExceptionHandler
+```
+
+---
+
+## 📊 Modèle de données (PostgreSQL)
+
+| Table | Description |
+|---|---|
+| `users` | Utilisateurs (email, passwordHash, firstName, lastName, emailVerified...) |
+| `roles` | Rôles (`ROLE_USER`, `ROLE_MODERATOR`, `ROLE_ADMIN`) |
+| `permissions` | Permissions (`USER_READ`, `USER_CREATE`, `USER_UPDATE`, `USER_DELETE`) |
+| `role_permissions` | Table de jointure Rôle ↔ Permission |
+| `user_roles` | Table de jointure User ↔ Rôle |
+| `refresh_tokens` | Refresh tokens persistants (token, revoked, expiryDate, replacedByToken) |
+| `verification_tokens` | Tokens de vérification email (token, used, expiryDate) |
+
+---
+
+## 📋 Endpoints disponibles
+
+### 🟢 Endpoints publics — `/api/auth/**` (aucun JWT requis)
+
+| Méthode | Endpoint | Phase | Description | Body |
+|---|---|---|---|---|
+| `POST` | `/api/auth/register` | 1 | Créer un nouveau compte utilisateur | `{ email, password, firstName, lastName }` |
+| `POST` | `/api/auth/login` | 2 | Se connecter et recevoir un Access Token + Refresh Token | `{ email, password }` |
+| `POST` | `/api/auth/refresh` | 3 | Renouveler l'Access Token via rotation du Refresh Token | `{ refreshToken }` |
+| `POST` | `/api/auth/logout` | 3 | Révoquer le Refresh Token (déconnexion) | `{ refreshToken }` |
+| `GET` | `/api/auth/verify-email?token=xxx` | 5 | Confirmer l'email via le lien de vérification | Query param `token` |
+| `POST` | `/api/auth/resend-verification` | 5 | Renvoyer un email de vérification | `{ email }` |
+
+### 🔒 Endpoints protégés — JWT requis (`Authorization: Bearer <token>`)
+
+| Méthode | Endpoint | Phase | Permission requise | Description |
+|---|---|---|---|---|
+| `GET` | `/api/users/me` | 4 | `USER_READ` | Récupérer son propre profil |
+| `GET` | `/api/users/all` | 4 | `ROLE_ADMIN` | Lister tous les utilisateurs (admin uniquement) |
+| `DELETE` | `/api/users/{id}` | 4 | `USER_DELETE` | Supprimer un utilisateur (admin uniquement) |
+
+---
+
+## 🚀 Démarrage rapide
+
+### Prérequis
+
+- Java 17+
+- Maven (ou le wrapper `mvnw` fourni)
+- PostgreSQL
+
+### Installation
+
+```bash
+# Cloner le repo
+git clone https://github.com/AlaAydi/Identity_server.git
+cd Identity_server
+
+# Copier le fichier d'environnement et renseigner vos variables
+cp .env.example .env
+
+# Lancer l'application
+./mvnw spring-boot:run
+```
+
+Le serveur démarre par défaut sur `http://localhost:8081`.
+
+> ⚠️ Pensez à configurer votre base PostgreSQL et vos variables d'environnement (`.env`) : URL de connexion, secret JWT, identifiants du compte admin, etc.
+
+---
+
+## 🧪 Tester l'API avec Postman
+
+### 1. Inscription (Phase 1)
+
+```http
+POST http://localhost:8081/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "Password123!",
+  "firstName": "Jean",
+  "lastName": "Dupont"
+}
+```
+📧 Le lien de vérification email simulé apparaît dans les logs du serveur.
+
+### 2. Vérification de l'email (Phase 5)
+
+Copiez le token affiché dans les logs et collez-le dans l'URL :
+
+```http
+GET http://localhost:8081/api/auth/verify-email?token=LE_TOKEN_DES_LOGS
+```
+
+### 3. Connexion (Phase 2)
+
+```http
+POST http://localhost:8081/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "Password123!"
+}
+```
+Récupérez `accessToken` et `refreshToken` dans la réponse.
+
+### 4. Accéder à une route protégée (Phase 4)
+
+```http
+GET http://localhost:8081/api/users/me
+Authorization: Bearer <votre_accessToken>
+```
+
+### 5. Rafraîchir le token (Phase 3)
+
+```http
+POST http://localhost:8081/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "<votre_refreshToken>"
+}
+```
+⚡ Vous recevez un **nouvel** accessToken et un **nouveau** refreshToken ; l'ancien est automatiquement révoqué.
+
+### 6. Test RBAC — accès admin (Phase 4)
+
+```http
+POST http://localhost:8081/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@identity.com",
+  "password": "Admin123!"
+}
+```
+
+Puis :
+
+```http
+GET http://localhost:8081/api/users/all
+Authorization: Bearer <token_admin>
+```
+
+### 7. Test RBAC — accès refusé (Phase 4)
+
+Avec un token utilisateur standard :
+
+```http
+DELETE http://localhost:8081/api/users/{uuid}
+Authorization: Bearer <token_user_normal>
+```
+❌ Réponse attendue : `403 Forbidden`
+
+### 8. Renvoyer la vérification (Phase 5)
+
+```http
+POST http://localhost:8081/api/auth/resend-verification
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+```
+
+### 9. Déconnexion (Phase 3)
+
+```http
+POST http://localhost:8081/api/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "<votre_refreshToken>"
+}
+```
+
+---
+
+## ✅ Fonctionnalités implémentées
+
+| Phase | Fonctionnalité | Statut |
+|---|---|---|
+| 1 | Inscription utilisateur, PostgreSQL, BCrypt, validation, `GlobalExceptionHandler` | ✅ Terminé |
+| 2 | Spring Security, JWT (HMAC-SHA256), login, access token, `JwtFilter` | ✅ Terminé |
+| 3 | Refresh token, rotation des tokens, détection de réutilisation, logout | ✅ Terminé |
+| 4 | Rôles (USER, ADMIN, MODERATOR), permissions, RBAC, `@PreAuthorize`, `DataInitializer` | ✅ Terminé |
+| 5 | Vérification d'email, tokens de vérification (24h), renvoi de vérification | ✅ Terminé |
+
+## 🚧 Feuille de route (Phases 6–15)
+
+| Phase | Fonctionnalité | Description |
+|---|---|---|
+| 6 | Réinitialisation de mot de passe | `POST /api/auth/forgot-password` et `POST /api/auth/reset-password` avec tokens temporaires sécurisés |
+| 7 | Sessions | Voir les sessions actives (device, IP, userAgent), supprimer des sessions |
+| 8 | Logs d'audit | Enregistrement de `LOGIN_SUCCESS`, `LOGIN_FAILED`, `PASSWORD_CHANGED`, etc. avec endpoint admin |
+| 9 | MFA (TOTP) | Authentification à deux facteurs avec Google Authenticator |
+| 10 | Google OAuth2 | Connexion via Google avec Spring Security OAuth2 Client |
+| 11 | API Keys | Système de clés API pour les applications externes |
+| 12 | Redis | Rate limiting, cache de sessions, gestion des tokens temporaires |
+| 13 | Durcissement sécurité | CORS, verrouillage de compte, protection brute-force |
+| 14 | Tests | JUnit 5, Mockito, Spring Boot Test |
+| 15 | Intégration E-commerce | Connexion d'une application Angular + Spring Boot à l'Identity Server |
+
+---
+
+## 🛠️ Stack technique
+
+- **Langage** : Java 17+
+- **Framework** : Spring Boot, Spring Security
+- **Base de données** : PostgreSQL
+- **Authentification** : JWT (HMAC-SHA256), BCrypt
+- **Build** : Maven
+
+---
+
+## 📄 Licence
+
+Ce projet est distribué sous licence MIT — voir le fichier [LICENSE](LICENSE) pour plus de détails.
+
+## 👤 Auteur
+
+**Ala Aydi** — [@AlaAydi](https://github.com/AlaAydi)
