@@ -2,6 +2,10 @@ package com.identityserver.auth.service;
 
 import com.identityserver.auth.dto.*;
 import com.identityserver.auth.exception.InvalidCredentialsException;
+import com.identityserver.auth.exception.InvalidVerificationTokenException;
+import com.identityserver.notification.entity.VerificationToken;
+import com.identityserver.notification.service.EmailService;
+import com.identityserver.notification.service.VerificationTokenService;
 import com.identityserver.role.entity.Role;
 import com.identityserver.role.repository.RoleRepository;
 import com.identityserver.security.service.CustomUserDetailsService;
@@ -37,6 +41,8 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final CustomUserDetailsService userDetailsService;
+    private final VerificationTokenService verificationTokenService;
+    private final EmailService emailService;
 
     @Transactional
     public UserResponseDto register(RegisterRequestDto request) {
@@ -67,7 +73,11 @@ public class AuthService {
         // 5. Sauvegarde dans PostgreSQL
         User savedUser = userRepository.save(user);
 
-        // 6. Mapping vers DTO de réponse
+        // 6. Génération du token de vérification et envoi de l'email
+        VerificationToken verificationToken = verificationTokenService.createVerificationToken(savedUser);
+        emailService.sendVerificationEmail(savedUser.getEmail(), verificationToken.getToken());
+
+        // 7. Mapping vers DTO de réponse
         return userMapper.toResponseDto(savedUser);
     }
 
@@ -105,15 +115,12 @@ public class AuthService {
 
     @Transactional
     public RefreshTokenResponseDto refreshToken(RefreshTokenRequestDto request) {
-        // 1. Invalidation de l'ancien Refresh Token et création d'un nouveau (Token Rotation)
         RefreshToken newRefreshToken = refreshTokenService.rotateRefreshToken(request.getRefreshToken());
 
-        // 2. Génération d'un nouvel Access Token
         User user = newRefreshToken.getUser();
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String newAccessToken = jwtService.generateToken(userDetails);
 
-        // 3. Retour de la paire de tokens renouvelée
         return RefreshTokenResponseDto.builder()
                 .accessToken(newAccessToken)
                 .refreshToken(newRefreshToken.getToken())
@@ -125,5 +132,23 @@ public class AuthService {
     @Transactional
     public void logout(String refreshTokenStr) {
         refreshTokenService.revokeToken(refreshTokenStr);
+    }
+
+    @Transactional
+    public void verifyEmail(String token) {
+        verificationTokenService.verifyEmailToken(token);
+    }
+
+    @Transactional
+    public void resendVerificationEmail(String email) {
+        User user = userRepository.findByEmail(email.toLowerCase().trim())
+                .orElseThrow(() -> new InvalidVerificationTokenException("Aucun utilisateur trouvé avec cet email"));
+
+        if (user.isEmailVerified()) {
+            throw new InvalidVerificationTokenException("Cet email est déjà vérifié");
+        }
+
+        VerificationToken verificationToken = verificationTokenService.createVerificationToken(user);
+        emailService.sendVerificationEmail(user.getEmail(), verificationToken.getToken());
     }
 }
