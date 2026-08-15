@@ -21,7 +21,7 @@ public class AuthController {
     public ResponseEntity<ApiResponse<UserResponseDto>> register(@Valid @RequestBody RegisterRequestDto request) {
         UserResponseDto registeredUser = authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Utilisateur enregistré avec succès", registeredUser));
+                .body(ApiResponse.success("Utilisateur enregistré avec succès. Un email de vérification a été envoyé.", registeredUser));
     }
 
     @PostMapping("/login")
@@ -40,5 +40,17 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody RefreshTokenRequestDto request) {
         authService.logout(request.getRefreshToken());
         return ResponseEntity.ok(ApiResponse.success("Déconnexion réussie. Le Refresh Token a été révoqué.", null));
+    }
+
+    @GetMapping("/verify-email")
+    public ResponseEntity<ApiResponse<Void>> verifyEmail(@RequestParam String token) {
+        authService.verifyEmail(token);
+        return ResponseEntity.ok(ApiResponse.success("Email vérifié avec succès. Votre compte est maintenant activé.", null));
+    }
+
+    @PostMapping("/resend-verification")
+    public ResponseEntity<ApiResponse<Void>> resendVerification(@Valid @RequestBody ResendVerificationRequestDto request) {
+        authService.resendVerificationEmail(request.getEmail());
+        return ResponseEntity.ok(ApiResponse.success("Un nouvel email de vérification a été envoyé.", null));
     }
 }
