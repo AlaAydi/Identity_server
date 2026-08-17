@@ -2,6 +2,7 @@ package com.identityserver.common.exception;
 
 import com.identityserver.common.dto.ErrorResponse;
 import com.identityserver.auth.exception.InvalidCredentialsException;
+import com.identityserver.auth.exception.InvalidPasswordResetTokenException;
 import com.identityserver.auth.exception.InvalidRefreshTokenException;
 import com.identityserver.auth.exception.InvalidVerificationTokenException;
 import com.identityserver.user.exception.EmailAlreadyExistsException;
@@ -54,6 +55,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidVerificationTokenException.class)
     public ResponseEntity<ErrorResponse> handleInvalidVerificationToken(InvalidVerificationTokenException ex) {
+        ErrorResponse response = ErrorResponse.builder()
+                .status(HttpStatus.BAD_REQUEST.value())
+                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                .message(ex.getMessage())
+                .timestamp(LocalDateTime.now())
+                .build();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(InvalidPasswordResetTokenException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidPasswordResetToken(InvalidPasswordResetTokenException ex) {
         ErrorResponse response = ErrorResponse.builder()
                 .status(HttpStatus.BAD_REQUEST.value())
                 .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
