@@ -145,6 +145,64 @@ Le serveur démarre par défaut sur `http://localhost:8081`.
 
 ---
 
+## 🐳 Lancer avec Docker
+
+Le serveur est également disponible en image Docker prête à l'emploi sur Docker Hub, ce qui évite d'installer Java/Maven localement.
+
+### Option A — Utiliser l'image publiée (le plus simple)
+
+```bash
+docker pull aydiala/identity-server
+```
+
+```bash
+docker run -p 8081:8081 \
+  -e DB_URL=jdbc:postgresql://host.docker.internal:5432/identity_server \
+  -e DB_USERNAME=postgres \
+  -e DB_PASSWORD=votre_mot_de_passe \
+  -e JWT_SECRET=votre_cle_secrete_256_bits \
+  -e JWT_EXPIRATION=900000 \
+  -e JWT_REFRESH_EXPIRATION=604800000 \
+  aydiala/identity-server
+```
+
+> ℹ️ `host.docker.internal` permet au conteneur de joindre une base PostgreSQL qui tourne sur votre machine hôte (hors conteneur). Si votre base est ailleurs (conteneur, serveur distant), remplacez cette valeur par la bonne adresse.
+
+Vous pouvez aussi réutiliser directement votre `.env` existant :
+```bash
+docker run -p 8081:8081 --env-file .env \
+  -e DB_URL=jdbc:postgresql://host.docker.internal:5432/identity_server \
+  aydiala/identity-server
+```
+
+### Option B — Construire l'image vous-même depuis le code source
+
+```bash
+git clone https://github.com/AlaAydi/Identity_server.git
+cd Identity_server
+
+# Construire l'image (build multi-stage : compilation Maven puis image finale légère)
+docker build -t identity-server .
+
+# Lancer le conteneur
+docker run -p 8081:8081 --env-file .env \
+  -e DB_URL=jdbc:postgresql://host.docker.internal:5432/identity_server \
+  identity-server
+```
+
+Le `Dockerfile` utilise un build en 2 étapes : la première compile le `.jar` avec Maven (`maven:3.9-eclipse-temurin-21`), la seconde ne conserve que le `.jar` dans une image `eclipse-temurin:21-jre-alpine` légère, exécutée avec un utilisateur non-root (`spring`) pour plus de sécurité.
+
+### Vérifier que ça fonctionne
+
+```bash
+curl -X POST http://localhost:8081/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
+```
+Une réponse `401 Unauthorized` (identifiants incorrects) confirme que le serveur, Spring Security et la connexion PostgreSQL fonctionnent correctement.
+
+---
+
 ## 🧪 Tester l'API avec Postman
 
 ### 1. Inscription (Phase 1)
@@ -314,6 +372,7 @@ Content-Type: application/json
 - **Base de données** : PostgreSQL
 - **Authentification** : JWT (HMAC-SHA256), BCrypt
 - **Build** : Maven
+- **Conteneurisation** : Docker (build multi-stage, image publiée sur [Docker Hub](https://hub.docker.com/r/aydiala/identity-server))
 
 ---
 
