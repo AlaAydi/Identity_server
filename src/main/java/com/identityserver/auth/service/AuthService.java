@@ -3,13 +3,16 @@ package com.identityserver.auth.service;
 import com.identityserver.auth.dto.*;
 import com.identityserver.auth.exception.InvalidCredentialsException;
 import com.identityserver.auth.exception.InvalidVerificationTokenException;
+import com.identityserver.notification.entity.PasswordResetToken;
 import com.identityserver.notification.entity.VerificationToken;
 import com.identityserver.notification.service.EmailService;
+import com.identityserver.notification.service.PasswordResetTokenService;
 import com.identityserver.notification.service.VerificationTokenService;
 import com.identityserver.role.entity.Role;
 import com.identityserver.role.repository.RoleRepository;
 import com.identityserver.security.service.CustomUserDetailsService;
 import com.identityserver.token.entity.RefreshToken;
+import com.identityserver.token.repository.RefreshTokenRepository;
 import com.identityserver.token.service.JwtService;
 import com.identityserver.token.service.RefreshTokenService;
 import com.identityserver.user.dto.UserResponseDto;
@@ -40,25 +43,23 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final CustomUserDetailsService userDetailsService;
     private final VerificationTokenService verificationTokenService;
+    private final PasswordResetTokenService passwordResetTokenService;
     private final EmailService emailService;
 
     @Transactional
     public UserResponseDto register(RegisterRequestDto request) {
-        // 1. Vérification si l'email existe déjà
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new EmailAlreadyExistsException(request.getEmail());
         }
 
-        // 2. Récupération du rôle utilisateur par défaut ROLE_USER
         Role userRole = roleRepository.findByName("ROLE_USER")
                 .orElseThrow(() -> new RuntimeException("Erreur d'initialisation : Rôle ROLE_USER introuvable"));
 
-        // 3. Hash du mot de passe avec BCrypt
         String passwordHash = passwordEncoder.encode(request.getPassword());
 
-        // 4. Création de l'entité User avec le rôle ROLE_USER
         User user = User.builder()
                 .email(request.getEmail().toLowerCase().trim())
                 .passwordHash(passwordHash)
@@ -70,14 +71,11 @@ public class AuthService {
                 .roles(new HashSet<>(Set.of(userRole)))
                 .build();
 
-        // 5. Sauvegarde dans PostgreSQL
         User savedUser = userRepository.save(user);
 
-        // 6. Génération du token de vérification et envoi de l'email
         VerificationToken verificationToken = verificationTokenService.createVerificationToken(savedUser);
         emailService.sendVerificationEmail(savedUser.getEmail(), verificationToken.getToken());
 
-        // 7. Mapping vers DTO de réponse
         return userMapper.toResponseDto(savedUser);
     }
 
@@ -85,7 +83,6 @@ public class AuthService {
     public LoginResponseDto login(LoginRequestDto request) {
         String email = request.getEmail().toLowerCase().trim();
 
-        // 1. Authentification via Spring Security AuthenticationManager
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(email, request.getPassword())
@@ -94,16 +91,13 @@ public class AuthService {
             throw new InvalidCredentialsException();
         }
 
-        // 2. Récupération de l'utilisateur
         User user = userRepository.findByEmail(email)
                 .orElseThrow(InvalidCredentialsException::new);
 
-        // 3. Génération du JWT Access Token et du Refresh Token persistent
         UserDetails userDetails = userDetailsService.loadUserByUsername(email);
         String jwtToken = jwtService.generateToken(userDetails);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
-        // 4. Construction du DTO de réponse
         return LoginResponseDto.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken.getToken())
@@ -150,5 +144,26 @@ public class AuthService {
 
         VerificationToken verificationToken = verificationTokenService.createVerificationToken(user);
         emailService.sendVerificationEmail(user.getEmail(), verificationToken.getToken());
+    }
+
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequestDto request) {
+        String email = request.getEmail().toLowerCase().trim();
+
+        userRepository.findByEmail(email).ifPresent(user -> {
+            PasswordResetToken resetToken = passwordResetTokenService.createPasswordResetToken(user);
+            emailService.sendPasswordResetEmail(user.getEmail(), resetToken.getToken());
+        });
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequestDto request) {
+        User user = passwordResetTokenService.validateAndGetUser(request.getToken());
+
+        String newPasswordHash = passwordEncoder.encode(request.getNewPassword());
+        user.setPasswordHash(newPasswordHash);
+        userRepository.save(user);
+
+        refreshTokenRepository.revokeAllByUser(user);
     }
 }
