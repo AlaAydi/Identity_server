@@ -88,6 +88,7 @@ identity-server/
 | `user_roles` | Table de jointure User ↔ Rôle |
 | `refresh_tokens` | Refresh tokens persistants (token, revoked, expiryDate, replacedByToken) |
 | `verification_tokens` | Tokens de vérification email (token, used, expiryDate) |
+| `password_reset_tokens` | Tokens de réinitialisation de mot de passe (token, used, expiryDate) |
 
 ---
 
@@ -103,6 +104,8 @@ identity-server/
 | `POST` | `/api/auth/logout` | 3 | Révoquer le Refresh Token (déconnexion) | `{ refreshToken }` |
 | `GET` | `/api/auth/verify-email?token=xxx` | 5 | Confirmer l'email via le lien de vérification | Query param `token` |
 | `POST` | `/api/auth/resend-verification` | 5 | Renvoyer un email de vérification | `{ email }` |
+| `POST` | `/api/auth/forgot-password` | 6 | Demander un lien de réinitialisation de mot de passe (valide 15 min) | `{ email }` |
+| `POST` | `/api/auth/reset-password` | 6 | Réinitialiser le mot de passe via le token reçu par email | `{ token, newPassword }` |
 
 ### 🔒 Endpoints protégés — JWT requis (`Authorization: Bearer <token>`)
 
@@ -250,6 +253,31 @@ Content-Type: application/json
 }
 ```
 
+### 10. Mot de passe oublié (Phase 6)
+
+```http
+POST http://localhost:8081/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+```
+📧 Le lien de réinitialisation simulé (avec le token) apparaît dans les logs du serveur. Il est valide 15 minutes.
+
+### 11. Réinitialisation du mot de passe (Phase 6)
+
+```http
+POST http://localhost:8081/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "token": "LE_TOKEN_DES_LOGS",
+  "newPassword": "NouveauPassword123!"
+}
+```
+⚡ Toutes les sessions actives (refresh tokens) de l'utilisateur sont révoquées après la réinitialisation.
+
 ---
 
 ## ✅ Fonctionnalités implémentées
@@ -261,12 +289,12 @@ Content-Type: application/json
 | 3 | Refresh token, rotation des tokens, détection de réutilisation, logout | ✅ Terminé |
 | 4 | Rôles (USER, ADMIN, MODERATOR), permissions, RBAC, `@PreAuthorize`, `DataInitializer` | ✅ Terminé |
 | 5 | Vérification d'email, tokens de vérification (24h), renvoi de vérification | ✅ Terminé |
+| 6 | Réinitialisation de mot de passe (`forgot-password` / `reset-password`), tokens temporaires (15 min), révocation des sessions actives | ✅ Terminé |
 
-## 🚧 Feuille de route (Phases 6–15)
+## 🚧 Feuille de route (Phases 7–15)
 
 | Phase | Fonctionnalité | Description |
 |---|---|---|
-| 6 | Réinitialisation de mot de passe | `POST /api/auth/forgot-password` et `POST /api/auth/reset-password` avec tokens temporaires sécurisés |
 | 7 | Sessions | Voir les sessions actives (device, IP, userAgent), supprimer des sessions |
 | 8 | Logs d'audit | Enregistrement de `LOGIN_SUCCESS`, `LOGIN_FAILED`, `PASSWORD_CHANGED`, etc. avec endpoint admin |
 | 9 | MFA (TOTP) | Authentification à deux facteurs avec Google Authenticator |
